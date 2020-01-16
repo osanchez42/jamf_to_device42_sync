@@ -22,6 +22,7 @@ class Integration:
     def __init__(self):
         self.computers = jamf_api.get_list('computers')
         self.mobile_devices = jamf_api.get_list('mobiledevices')
+        self.users = jamf_api.get_list('users')
 
     def get_computers(self):
         devices = []
@@ -113,6 +114,44 @@ class Integration:
                 })
 
         return mobile_devices
+
+    def get_device_owners(self):
+        devices = []
+
+        # go through all the users in jamf to get relational mappings to devices
+        for user in self.users['users']:
+            user_data = jamf_api.get_item('users', user['id'])['user']
+
+            # get all the useful fields from a user
+            user_fields = {
+                'Owner': user_data['full_name'],
+                'Email': user_data['email'],
+                'Phone': user_data['phone_number']
+            }
+
+            # list of owned devices
+            computers = user_data['links']['computers']
+            mobile_devices = user_data['links']['mobile_devices']
+
+            # go through list of computers
+            for computer in computers:
+                computer_name = computer['name']
+
+                devices.append({
+                    'name': computer_name,
+                    'custom_fields': ','.join(user_fields)
+                })
+
+            # go through list of mobile devices
+            for mobile_device in mobile_devices:
+                mobile_device_name = mobile_device['name']
+
+                devices.append({
+                    'name': mobile_device_name,
+                    'custom_fields': ','.join(user_fields)
+                })
+
+        return devices
 
     @staticmethod
     def get_device_network(general):
@@ -209,8 +248,35 @@ def main():
     return data
 
 
+def map_owners():
+    integration = Integration()
+
+    data = {
+        'owners': []
+    }
+
+    device_owners = integration.get_device_owners()
+
+    for device in device_owners:
+
+        data['owners'].append({
+            'name': device['name'],
+            'type': 'text',  # does not need to be included, defaults to text
+            'bulk_fields': device['custom_fields']
+        })
+
+    return data
+
+
 if __name__ == '__main__':
-    elements = main()
-    for element in elements['devices']:
-        print device42_api.bulk(element)
+    print 'importing devices'
+    devices = main()
+    for device in devices['devices']:
+        print device42_api.bulk(device)
+
+    print 'mapping owners'
+    owners = map_owners()
+    for owner in owners['owners']:
+        print device42_api.put(owner, 'custom_field')
+
     print '\n Finished'

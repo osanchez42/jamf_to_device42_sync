@@ -31,6 +31,25 @@ class Device42Api:
 
         return r
 
+    def _putter(self, data, url):
+        payload = data
+        headers = {
+            'Authorization': 'Basic ' + base64.b64encode(self.username + ':' + self.password)
+        }
+
+        r = requests.put(url, payload, headers=headers, verify=False)
+        if self.debug:
+            msg1 = unicode(payload)
+            msg2 = 'Status code: %s' % str(r.status_code)
+            msg3 = str(r.text)
+
+            print '\n\t----------- PUT FUNCTION -----------'
+            print '\t' + msg1
+            print '\t' + msg2
+            print '\t' + msg3
+            print '\t------- END OF PUT FUNCTION -------\n'
+        return r
+
     def _getter(self, data, url):
         params = data
         headers = {
@@ -69,6 +88,14 @@ class Device42Api:
             print '\t------- END OF DELETE FUNCTION -------\n'
 
         return r
+
+    # PUT
+    def put(self, data, name):
+        url = 'https://%s/api/1.0/%s/' % (self.host, name)
+        msg = '\tPut request to %s ' % url
+        if not self.dry_run:
+            print msg
+        return self._putter(data, url).json()
 
     # GET
     def get_list(self, data, name):
