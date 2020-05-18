@@ -1,6 +1,7 @@
 import requests
 import json
 
+
 class JamfApi:
 
     def __init__(self, config, options):
@@ -14,14 +15,14 @@ class JamfApi:
 
     def get_list(self, name):
         return requests.get('https://%s/JSSResource/%s' % (self.host, name), 
-                            auth = self.auth, 
+                            auth=self.auth,
                             headers=self.headers 
-                            #verify = False
+                            # verify = False
                             ).json()
 
     def get_item(self, name, pk):
         return requests.get('https://%s/JSSResource/%s/id/%s' % (self.host, name, pk), 
-                            auth = self.auth, 
+                            auth=self.auth,
                             headers=self.headers 
-                            #verify = False
+                            # verify = False
                             ).json()

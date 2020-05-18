@@ -1,8 +1,6 @@
 # starter.py v2
 
 import sys
-reload(sys)
-sys.setdefaultencoding('utf8')
 
 import json
 import yaml
@@ -10,7 +8,7 @@ from jamf import JamfApi
 from device42 import Device42Api
 
 with open('config.yaml', 'r') as cfg:
-	config = yaml.load(cfg.read())
+    config = yaml.load(cfg.read())
 
 device42 = config['device42']
 jamf = config['jamf']
@@ -23,11 +21,22 @@ mobile_deviceCF = config['custom_fields']['mobile_device']
 computerCF = config['custom_fields']['computer']
 enduserCF = config['custom_fields']['enduser']
 
+
 class Integration:
 
     def __init__(self):
         self.computers = jamf_api.get_list('computers')
         self.mobile_devices = jamf_api.get_list('mobiledevices')
+        self.buildings = jamf_api.get_list('buildings')
+
+    def get_buildings(self):
+        buildings = []
+        for building in self.buildings['buildings']:
+            buildings.append({
+                'name': building['name']
+            })
+
+        return buildings
 
     def get_computers(self):
         devices = []
@@ -39,9 +48,10 @@ class Integration:
             software = computer_data['software']
             purchase = computer_data['purchasing']
             storage = hardware['storage']
+            location = computer_data['location']
 
             if general['name']:
-
+                newtype, newsubtype = self.define_Type(hardware['model'])
                 hdd_count = 0
                 hdd_size = 0
                 if storage:
@@ -54,9 +64,9 @@ class Integration:
                         hdd_size = 1.0 * hdd_size / 1000  # convert to Gb
 
                 device.update({
-                    'name': general['name'],
-                    'new_name': general['name'],
-                    'type': 'physical',
+                    'name': '%s-%s' % (general['name'], computer['id']),
+                    'new_name': '%s-%s' % (general['name'], computer['id']),
+                    'type': newtype,
                     'manufacturer': 'Apple Inc.',
                     'hddcount': hdd_count,
                     'hddsize': hdd_size,
@@ -72,11 +82,22 @@ class Integration:
                     'tags': general['asset_tag'] if general['asset_tag'] else None
                 })
 
+                if location['building']:
+                    device.update({
+                        'building': location['building']
+                    })
+
+                if newsubtype:
+                    device.update({
+                        'subtype': newsubtype
+                    })
+
                 devices.append({
                     'device': {k: v for (k, v) in device.items() if str(v) != str(-1)},
                     'general': general,
                     'software': software,
-                    'purchase': purchase
+                    'purchase': purchase,
+                    'location': location
                 })
 
         return devices
@@ -85,21 +106,22 @@ class Integration:
         mobile_devices = []
         for mobile_device in self.mobile_devices['mobile_devices']:
             device = {}
-            computer_data = jamf_api.get_item('mobile_devices', mobile_device['id'])['mobile_device']
+            computer_data = jamf_api.get_item('mobiledevices', mobile_device['id'])['mobile_device']
             general = computer_data['general']
             software = computer_data['applications']
             purchase = computer_data['purchasing']
+            location = computer_data['location']
 
             if general['display_name']:
                 capacity = None
-
+                newtype, newsubtype = self.define_Type(general['model'])
                 if 'capacity_mb' in general and general['capacity_mb']:
                     capacity = int(general['capacity_mb']) / 1000
 
                 device.update({
-                    'name': general['display_name'],
-                    'new_name': general['display_name'],
-                    'type': 'physical',
+                    'name': '%s-%s' % (general['name'], mobile_device['id']),
+                    'new_name': '%s-%s' % (general['name'], mobile_device['id']),
+                    'type': newtype,
                     'manufacturer': 'Apple Inc.',
                     'hddcount': None if capacity is None else 1,
                     'hddsize': capacity,
@@ -111,17 +133,27 @@ class Integration:
                     'tags': general['asset_tag'] if general['asset_tag'] else None
                 })
 
+                if location['building']:
+                    device.update({
+                        'building': location['building']
+                    })
+
+                if newsubtype:
+                    device.update({
+                        'subtype': newsubtype
+                    })
+
                 mobile_devices.append({
                     'device': {k: v for (k, v) in device.items() if str(v) != str(-1)},
                     'general': general,
                     'software': software,
-                    'purchase': purchase
+                    'purchase': purchase,
+                    'location': location
                 })
 
         return mobile_devices
 
-    @staticmethod
-    def get_device_network(general):
+    def get_device_network(self, general):
         macs = []
         ips = []
 
@@ -153,10 +185,9 @@ class Integration:
 
         return macs, ips
 
-    @staticmethod
-    def get_device_software(applications):
+    def get_device_software(self, applications):
         software = []
-        for item in applications['applications']:
+        for item in applications:
             if 'name' in item and item['name']:  # computer
                 software.append({
                     'software': item['name'],
@@ -171,203 +202,157 @@ class Integration:
 
         return software
 
-			if general['last_reported_ip']:
-				ips.append({
-					'ipaddress': general['last_reported_ip'],
-				})
+    def define_Type(self, hardware):
+        newtype = 'other'
+        newsubtype = None
+        if 'imac' in hardware.lower():
+            newsubtype = 'desktop'  # set device newsubtype to desktop
+        elif 'macmini' in hardware.lower():
+            newsubtype = 'desktop'  # set device newsubtype to desktop
+        elif 'mac mini' in hardware.lower():
+            newsubtype = 'desktop'  # set device newsubtype to desktop
+        elif 'macbook' in hardware.lower():
+            newsubtype = 'laptop'  # set device newsubtype to desktop
+        elif 'ipad' in hardware.lower():
+            newsubtype = 'tablet'  # set device newsubtype to desktop
+        elif 'iphone' in hardware.lower():
+            newsubtype = 'mobile phone'  # set device newsubtype to desktop
+        return newtype, newsubtype
 
-		return macs, ips
+    # Takes a list of custom fields, checks to see if they are in the element and appends them to cfList
+    def get_device_custom_fields(self, customFields, cfList, element):
+        for cf in customFields:
+            if cf['dict'] in element and element[cf['dict']]:
+                dataDict = element[cf['dict']]
+                key = cf['key']
+                if key in dataDict and dataDict[key]:
+                    cfList.append({
+                        'name': element['device']['name'],
+                        'key': key,
+                        'value': dataDict[key],
+                        'type': cf['type'],
+                        'related_field_name': cf['related_field_name'] if cf['related_field_name'] else None
+                    })
 
-	def get_device_software(self, applications):
-		software = []
-		for item in applications:
-			if 'name' in item and item['name']:  # computer
-				software.append({
-					'software': item['name'],
-					'version': item['version'],
-				})
+    # Takes a list of custom fields, checks to see if they are in the element and appends them to cfList
+    def get_enduser_custom_fields(self, customFields, cfList, element):
+        for cf in customFields:
+            if cf['dict'] in element and element[cf['dict']]:
+                dataDict = element[cf['dict']]
+                key = cf['key']
+                if key in dataDict and dataDict[key]:
+                    cfList.append({
+                        'name': element['enduser']['name'],
+                        'key': key,
+                        'value': dataDict[key],
+                        'type': cf['type'],
+                        'related_field_name': cf['related_field_name'] if cf['related_field_name'] else None
+                    })
 
-			elif 'application_name' in item and item['application_name']:  # mobile device
-				software.append({
-					'software': item['application_name'],
-					'version': item['application_version'],
-				})
+    # Takes the location dictionary from computer/mobile_device and returns a enduser
+    def get_enduser(self, location):
+        data = {}
+        enduser = {}
 
-		return software
+        if location['username']:
+            enduser.update({
+                'name': location['username'],
+                'email': location['email_address'] if location['email_address'] else None,
+                'contact': location['phone_number'] if location['phone_number'] else None
+            })
+            data.update({
+                'enduser': enduser,
+                'location': location
+            })
+        return data
 
-	def define_Type(self, hardware):
-		newtype = 'other'
-		newsubtype = None
-		if 'imac' in hardware.lower():
-			newsubtype = 'desktop'  # set device newsubtype to desktop
-		elif 'macmini' in hardware.lower():
-			newsubtype = 'desktop'  # set device newsubtype to desktop
-		elif 'mac mini' in hardware.lower():
-			newsubtype = 'desktop'  # set device newsubtype to desktop
-		elif 'macbook' in hardware.lower():
-			newsubtype = 'laptop'  # set device newsubtype to desktop
-		elif 'ipad' in hardware.lower():
-			newsubtype = 'tablet'  # set device newsubtype to desktop
-		elif 'iphone' in hardware.lower():
-			newsubtype = 'mobile phone'  # set device newsubtype to desktop
-		return newtype, newsubtype
-
-	# Takes a list of custom fields, checks to see if they are in the element and appends them to cfList
-	def get_device_custom_fields(self, customFields, cfList, element): 
-		for cf in customFields:
-			if cf['dict'] in element and element[cf['dict']]:
-				dataDict = element[cf['dict']]
-				key = cf['key']
-				if key in dataDict and dataDict[key]: 
-					cfList.append({
-						'name' : element['device']['name'], 
-						'key' : key, 
-						'value' : dataDict[key], 
-						'type' : cf['type'], 
-						'related_field_name' : cf['related_field_name'] if cf['related_field_name'] else None
-					})
-
-	# Takes a list of custom fields, checks to see if they are in the element and appends them to cfList
-	def get_enduser_custom_fields(self, customFields, cfList, element): 
-		for cf in customFields:
-			if cf['dict'] in element and element[cf['dict']]:
-				dataDict = element[cf['dict']]
-				key = cf['key']
-				if key in dataDict and dataDict[key]: 
-					cfList.append({
-						'name' : element['enduser']['name'], 
-						'key' : key, 
-						'value' : dataDict[key], 
-						'type' : cf['type'], 
-						'related_field_name' : cf['related_field_name'] if cf['related_field_name'] else None
-					})
-	
-	# Takes the location dictionary from computer/mobile_device and returns a enduser
-	def get_enduser(self, location): 
-		data = {}
-		enduser = {}
-
-		if location['username']:
-			enduser.update({
-				'name' : location['username'],
-				'email' : location['email_address'] if location['email_address'] else None, 
-				'contact' : location['phone_number'] if location['phone_number'] else None
-			})
-			data.update({
-				'enduser' : enduser, 
-				'location' : location
-			})
-		return data
 
 def main():
-	integration = Integration()
-	computers = integration.get_computers()
-	mobile_devices = integration.get_mobile_devices()
-	buildings = integration.get_buildings()
-
-	deviceData = {
-		'devices': [], 
-		'device_custom_fields': [],
-		'endusers': [], 
-		'enduser_custom_fields': [], 
-		'buildings': buildings
-	}
-
-	# computers
-	for computer in computers:
-		macs, ips = integration.get_device_network(computer['general'])
-		software = integration.get_device_software(computer['software'])
-		enduser = integration.get_enduser(computer['location'])
-
-		if options['no_ips']:
-			ips = []
-
-
+    integration = Integration()
     computers = integration.get_computers()
     mobile_devices = integration.get_mobile_devices()
+    buildings = integration.get_buildings()
 
-    data = {
-        'devices': []
+    deviceData = {
+        'devices': [],
+        'device_custom_fields': [],
+        'endusers': [],
+        'enduser_custom_fields': [],
+        'buildings': buildings
     }
 
     # computers
     for computer in computers:
         macs, ips = integration.get_device_network(computer['general'])
         software = integration.get_device_software(computer['software'])
+        enduser = integration.get_enduser(computer['location'])
 
         if options['no_ips']:
             ips = []
 
-        data['devices'].append({
+        deviceData['devices'].append({
             'device': computer['device'],
             'macs': macs,
             'ips': ips,
             'software': software
         })
 
+        # Grab computer custom fields
+        integration.get_device_custom_fields(computerCF, deviceData['device_custom_fields'], computer)
+
+        # Grab enduser and any associated custom fields
+        if enduser:
+            integration.get_enduser_custom_fields(enduserCF, deviceData['enduser_custom_fields'], enduser)
+            deviceData['endusers'].append(enduser['enduser'])
+
     # mobile devices
     for mobile_device in mobile_devices:
         macs, ips = integration.get_device_network(mobile_device['general'])
         software = integration.get_device_software(mobile_device['software'])
+        enduser = integration.get_enduser(mobile_device['location'])
 
-		# Grab computer custom fields
-		integration.get_device_custom_fields(computerCF, deviceData['device_custom_fields'], computer)
+        if options['no_ips']:
+            ips = []
 
-        data['devices'].append({
+        deviceData['devices'].append({
             'device': mobile_device['device'],
             'macs': macs,
             'ips': ips,
             'software': software
         })
 
-	# mobile devices
-	for mobile_device in mobile_devices:
-		macs, ips = integration.get_device_network(mobile_device['general'])
-		software = integration.get_device_software(mobile_device['software'])
-		enduser = integration.get_enduser(mobile_device['location'])
+        # Grab mobile device custom fields
+        integration.get_device_custom_fields(mobile_deviceCF, deviceData['device_custom_fields'], mobile_device)
 
-		if options['no_ips']:
-			ips = []
+        # Grab enduser and any associated custom fields
+        if enduser:
+            integration.get_enduser_custom_fields(enduserCF, deviceData['enduser_custom_fields'], enduser)
+            deviceData['endusers'].append(enduser['enduser'])
 
-		deviceData['devices'].append({
-			'device': mobile_device['device'],
-			'macs': macs,
-			'ips': ips,
-			'software': software
-		})
-
-		# Grab mobile device custom fields
-		integration.get_device_custom_fields(mobile_deviceCF, deviceData['device_custom_fields'], mobile_device)
-
-		# Grab enduser and any associated custom fields
-		if enduser:
-			integration.get_enduser_custom_fields(enduserCF, deviceData['enduser_custom_fields'], enduser)
-			deviceData['endusers'].append(enduser['enduser'])
-
-	return deviceData
+    return deviceData
 
 
 if __name__ == '__main__':
-	elements = main()
+    elements = main()
 
-	# Import buildings
-	for element in elements['buildings']:
-		print device42_api.post_building(element)
+    # Import buildings
+    for element in elements['buildings']:
+        print(device42_api.post_building(element))
 
-	# Bulk import of devices
-	for element in elements['devices']:
-		print device42_api.bulk(element)
-			
-	# Import endusers
-	for element in elements['endusers']:
-		print device42_api.post_enduser(element)
+    # Bulk import of devices
+    for element in elements['devices']:
+        print(device42_api.bulk(element))
 
-	# Import enduser custom fields
-	for element in elements['enduser_custom_fields']:
-		print device42_api.put_enduserCF(element)
+    # Import endusers
+    for element in elements['endusers']:
+        print(device42_api.post_enduser(element))
 
-	# Import device custom fields
-	for element in elements['device_custom_fields']:
-		print device42_api.put_deviceCF(element)
+    # Import enduser custom fields
+    for element in elements['enduser_custom_fields']:
+        print(device42_api.put_enduserCF(element))
 
-	print '\n Finished'
+    # Import device custom fields
+    for element in elements['device_custom_fields']:
+        print(device42_api.put_deviceCF(element))
+
+    print('\n Finished')

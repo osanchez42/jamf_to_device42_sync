@@ -1,7 +1,7 @@
 device42:
-  host: 192.168.0.1
-  username: admin
-  password: adm!nd42
+  host: d42_url
+  username: d42_username
+  password: d42_password
 
 jamf:
   host: tryitout.jamfcloud.com

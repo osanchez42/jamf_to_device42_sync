@@ -19,15 +19,15 @@ class Device42Api:
 
         r = requests.post(url, payload, headers=headers, verify=False)
         if self.debug:
-            msg1 = unicode(payload)
+            msg1 = payload
             msg2 = 'Status code: %s' % str(r.status_code)
             msg3 = str(r.text)
 
-            print '\n\t----------- POST FUNCTION -----------'
-            print '\t' + msg1
-            print '\t' + msg2
-            print '\t' + msg3
-            print '\t------- END OF POST FUNCTION -------\n'
+            print('\n\t----------- POST FUNCTION -----------')
+            print('\t' + msg1)
+            print('\t' + msg2)
+            print('\t' + msg3)
+            print('\t------- END OF POST FUNCTION -------\n')
 
         return r
 
@@ -40,15 +40,15 @@ class Device42Api:
         r = requests.put(url=url, data=payload, headers=headers, verify=False)
 
         if self.debug:
-            msg1 = unicode(payload)
+            msg1 = payload
             msg2 = 'Status code: %s' % str(r.status_code)
             msg3 = str(r.text)
 
-            print '\n\t----------- PUT FUNCTION -----------'
-            print '\t' + msg1
-            print '\t' + msg2
-            print '\t' + msg3
-            print '\t------- END OF PUT FUNCTION -------\n'
+            print('\n\t----------- POST FUNCTION -----------')
+            print('\t' + msg1)
+            print('\t' + msg2)
+            print('\t' + msg3)
+            print('\t------- END OF POST FUNCTION -------\n')
 
         return r
 
@@ -61,15 +61,15 @@ class Device42Api:
 
         r = requests.get(url, params=params, headers=headers, verify=False)
         if self.debug:
-            msg1 = unicode(params)
+            msg1 = params
             msg2 = 'Status code: %s' % str(r.status_code)
             msg3 = str(r.text)
 
-            print '\n\t----------- GET FUNCTION -----------'
-            print '\t' + msg1
-            print '\t' + msg2
-            print '\t' + msg3
-            print '\t------- END OF GET FUNCTION -------\n'
+            print('\n\t----------- POST FUNCTION -----------')
+            print('\t' + msg1)
+            print('\t' + msg2)
+            print('\t' + msg3)
+            print('\t------- END OF POST FUNCTION -------\n')
 
         return r
 
@@ -84,10 +84,10 @@ class Device42Api:
             msg1 = 'Status code: %s' % str(r.status_code)
             msg2 = str(r.text)
 
-            print '\n\t----------- DELETE FUNCTION -----------'
-            print '\t' + msg1
-            print '\t' + msg2
-            print '\t------- END OF DELETE FUNCTION -------\n'
+            print('\n\t----------- POST FUNCTION -----------')
+            print('\t' + msg1)
+            print('\t' + msg2)
+            print('\t------- END OF POST FUNCTION -------\n')
 
         return r
 
@@ -96,7 +96,7 @@ class Device42Api:
         url = 'https://%s/api/1.0/%s/' % (self.host, name)
         msg = '\tGet request to %s ' % url
         if not self.dry_run:
-            print msg
+            print(msg)
         return self._getter(data, url).json()
 
     # DELETE
@@ -104,7 +104,7 @@ class Device42Api:
         url = 'https://%s/api/1.0/%s/%s' % (self.host, name, identity)
         msg = '\tDelete request to %s ' % url
         if not self.dry_run:
-            print msg
+            print(msg)
         return self._deleter(url).json()
 
     # BULK
@@ -112,7 +112,7 @@ class Device42Api:
         url = 'https://%s/api/1.0/devices/bulk/' % self.host
         msg = '\tBulk request to %s ' % url
         if not self.dry_run:
-            print msg
+            print(msg)
         return self._poster({'payload': json.dumps(data)}, url).json()
 
     # POST - END USER
